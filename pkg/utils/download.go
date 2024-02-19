@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-
-	"github.com/cheggaaa/pb/v3"
 )
 
 func Download(url string, target string) (string, error) {
@@ -36,7 +34,8 @@ func Download(url string, target string) (string, error) {
 	}
 
 	// Crear una nueva barra de progreso
-	bar := pb.StartNew(size)
+	bar := ProgressBar(size)
+	bar.Start()
 
 	// Descargar el archivo
 	res, err := http.Get(url)

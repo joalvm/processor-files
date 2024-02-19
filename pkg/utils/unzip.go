@@ -7,6 +7,58 @@ import (
 	"strings"
 )
 
+func UnZip(path string, dest string, mainDirName string) error {
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	// Crear el directorio principal
+	dirNamePath, err := makeDirectory(dest, mainDirName)
+	if err != nil {
+		return err
+	}
+
+	var rootDir string
+
+	size, _ := countZipFiles(path)
+
+	bar := ProgressBar(size)
+
+	bar.Start()
+
+	for _, f := range r.File {
+		bar.Set("filename", f.Name)
+		if err := processFile(f, dirNamePath, rootDir); err != nil {
+			return err
+		}
+
+		bar.Increment()
+	}
+
+	bar.Set("filename", "")
+	bar.Finish()
+
+	return nil
+}
+
+func countZipFiles(path string) (int, error) {
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+
+	var count int = 0
+
+	for range r.File {
+		count++
+	}
+
+	return count, nil
+}
+
 func makeDirectory(dest string, mainDirName string) (string, error) {
 	dirNamePath := Resolve(dest, mainDirName)
 
@@ -56,29 +108,6 @@ func processFile(f *zip.File, dirNamePath string, rootDir string) error {
 	// Copiar los datos al archivo
 	if _, err := io.Copy(f2, rc); err != nil {
 		return err
-	}
-	return nil
-}
-
-func UnZip(src string, dest string, mainDirName string) error {
-	r, err := zip.OpenReader(src)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	// Crear el directorio principal
-	dirNamePath, err := makeDirectory(dest, mainDirName)
-	if err != nil {
-		return err
-	}
-
-	var rootDir string
-
-	for _, f := range r.File {
-		if err := processFile(f, dirNamePath, rootDir); err != nil {
-			return err
-		}
 	}
 	return nil
 }

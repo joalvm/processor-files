@@ -22,16 +22,28 @@ func Un7z(path string, target string, mainDirName string) (string, error) {
 		return "", err
 	}
 
+	size, _ := count7zFiles(path)
+
+	bar := ProgressBar(size)
+
 	var rootDir string
+
+	bar.Start()
 
 	for {
 		hdr, err := sz.Next()
+
 		if err == io.EOF {
+			bar.Set("filename", "")
+			bar.Finish()
 			break // Fin del archivo
 		}
 		if err != nil {
+			bar.Finish()
 			return "", err
 		}
+
+		bar.Set("filename", hdr.Name)
 
 		// Obtener el nombre del directorio raíz del archivo .7z
 		if rootDir == "" {
@@ -39,9 +51,37 @@ func Un7z(path string, target string, mainDirName string) (string, error) {
 		}
 
 		processHeader(sz, dirNamePath, hdr, rootDir)
+		bar.Increment()
 	}
 
+	bar.Set("filename", "")
+	bar.Finish()
+
 	return dirNamePath, nil
+}
+
+func count7zFiles(path string) (int, error) {
+	sz, err := go7z.OpenReader(path)
+	if err != nil {
+		return 0, err
+	}
+	defer sz.Close()
+
+	var count int = 0
+
+	for {
+		_, err := sz.Next()
+		if err == io.EOF {
+			break // Fin del archivo
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		count++
+	}
+
+	return count, nil
 }
 
 func createDirectory(target string, mainDirName string) (string, error) {
