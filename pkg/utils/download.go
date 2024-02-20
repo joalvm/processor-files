@@ -8,22 +8,32 @@ import (
 	"strconv"
 )
 
+// Download downloads a file from the given URL and saves it to the specified target location.
+// It includes a progress bar to track the download progress.
+//
+// Parameters:
+//   - url (string): The URL of the file to be downloaded.
+//   - target (string): The target directory where the downloaded file will be saved.
+//
+// Returns:
+//   - string: The path of the downloaded file.
+//   - error: An error if any occurred during the download process.
 func Download(url string, target string) (string, error) {
-	// Extraer el nombre del archivo
+	// Resolve the file path
 	filePath := Resolve(target, filepath.Base(url))
 
-	// Verificar si el archivo ya existe
+	// Check if the file already exists
 	if _, err := os.Stat(filePath); err == nil {
 		return filePath, nil
 	}
 
-	// Asegurarse de que el directorio de destino exista
+	// Ensure that the target directory exists
 	err := os.MkdirAll(target, 0755)
 	if err != nil {
 		return "", err
 	}
 
-	// Obtener el tamaño del archivo para la barra de progreso
+	// Get the file size for the progress bar
 	resp, err := http.Head(url)
 	if err != nil {
 		return "", err
@@ -33,33 +43,33 @@ func Download(url string, target string) (string, error) {
 		return "", err
 	}
 
-	// Crear una nueva barra de progreso
+	// Create a new progress bar
 	bar := ProgressBar(size)
 	bar.Start()
 
-	// Descargar el archivo
+	// Download the file
 	res, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
 	defer res.Body.Close()
 
-	// Crear el archivo de destino
+	// Create the destination file
 	out, err := os.Create(filePath)
 	if err != nil {
 		return "", err
 	}
 	defer out.Close()
 
-	// Crear un ProxyReader para actualizar la barra de progreso
+	// Create a ProxyReader to update the progress bar
 	reader := bar.NewProxyReader(res.Body)
 
-	// Copiar los datos del archivo .tar al archivo de destino
+	// Copy the .tar file data to the destination file
 	if _, err := io.Copy(out, reader); err != nil {
 		return "", err
 	}
 
-	// Finalizar la barra de progreso
+	// Finish the progress bar
 	bar.Finish()
 
 	return filePath, nil

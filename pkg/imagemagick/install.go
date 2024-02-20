@@ -8,23 +8,22 @@ import (
 	"github.com/joalvm/processor-medias/pkg/utils"
 )
 
-func Install() {
+func Install(url string) error {
 	existsImageMagick, _ := os.Stat(ImageMagickBinPath)
 
 	if existsImageMagick != nil {
-		return
+		return nil
 	}
 
 	switch runtime.GOOS {
 	case "windows":
-		installWindows()
+		return installWindows(url)
 	default:
-		panic("No se puede instalar ImageMagick en este sistema operativo")
+		return fmt.Errorf("OS not supported")
 	}
 }
 
-func installWindows() {
-	url := "https://imagemagick.org/archive/binaries/ImageMagick-7.1.1-28-portable-Q16-HDRI-x64.zip"
+func installWindows(url string) error {
 	fmt.Printf("Descargando ImageMagick desde: %s\n", url)
 
 	imagemagickTempPath, _ := utils.Download(url, os.TempDir())
@@ -34,7 +33,7 @@ func installWindows() {
 	err := utils.UnZip(imagemagickTempPath, os.TempDir(), "imagemagick")
 
 	if err != nil {
-		fmt.Printf("Error: %s\n", err)
+		return err
 	}
 
 	imagemagickVersion, _ := ImageMagickVersion()
@@ -43,4 +42,6 @@ func installWindows() {
 
 	// Eliminar el archivo .zip
 	os.Remove(imagemagickTempPath)
+
+	return nil
 }
