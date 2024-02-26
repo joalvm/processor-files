@@ -36,7 +36,7 @@ func installWindows(url string) error {
 		return err
 	}
 
-	imagemagickVersion, _ := ImageMagickVersion()
+	imagemagickVersion, _ := New().Version()
 
 	fmt.Printf("ImageMagick: %s ✔️\n", imagemagickVersion)
 

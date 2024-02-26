@@ -1,8 +1,10 @@
 package processor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 /*
@@ -25,34 +27,20 @@ Example Usage:
 
 // use directoryMap to access the files found in each directory
 */
-func SearchFiles(sourceDir string) (map[string][]string, error) {
-	directoryMap := make(map[string][]string)
+func SearchFiles(sourceDir string) ([]string, error) {
+	var files []string
+
+	// Si el directorio no existe, retornar un error
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("directory does not exist")
+	}
 
 	err := filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() {
-			directory := path[len(sourceDir):]
-			if directory == "" {
-				directory = string(os.PathSeparator)
-			}
-
-			if _, exists := directoryMap[directory]; !exists {
-				directoryMap[directory] = []string{}
-			}
-
-			return nil
-		}
-
-		directory := filepath.Dir(path)[len(sourceDir):]
-
-		if directory == "" {
-			directory = string(os.PathSeparator)
-		}
-
-		directoryMap[directory] = append(directoryMap[directory], filepath.Base(path))
+		files = append(files, path)
 
 		return nil
 	})
@@ -61,5 +49,11 @@ func SearchFiles(sourceDir string) (map[string][]string, error) {
 		return nil, err
 	}
 
-	return directoryMap, nil
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no files found in directory")
+	}
+
+	sort.Strings(files)
+
+	return files, nil
 }
