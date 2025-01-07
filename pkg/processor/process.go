@@ -10,10 +10,12 @@ import (
 	"github.com/joalvm/processor-medias/pkg/images"
 	"github.com/joalvm/processor-medias/pkg/models"
 	"github.com/joalvm/processor-medias/pkg/utils"
+	"github.com/joalvm/processor-medias/pkg/videos"
 )
 
 func (p *Processor) Process() error {
 	err := p.HandleThirdPartyLibraries()
+
 	if err != nil {
 		return err
 	}
@@ -39,25 +41,37 @@ func (p *Processor) Process() error {
 		}
 
 		if info.IsDir() {
-			makeDirectory(filePath, p.sourceDir)
+			p.makeDirectory(filePath)
 			bar.Increment()
+
+			p.directoryService.Create(models.Directory{
+				Code:     utils.StrRandom(10),
+				RealName: filepath.Base(filePath),
+				Index:    p.GlobalIndex,
+				DirIndex: p.FilesIndexer[filePath[len(p.sourceDir):]],
+			})
 
 			continue
 		}
+
+		p.GlobalIndex++
+		bar.Increment()
+
+		continue
 
 		bar.Set("filename", formatFilePath(filePath[len(p.sourceDir):]))
 
 		directory := filepath.Dir(filePath)[len(p.sourceDir):]
 
-		model, err := handleFile(file, DirectoryIndexes[directory], p.destinationDir, directory)
+		model, err := p.handleFile(file, p.FilesIndexer[directory], p.destinationDir, directory)
 		if err != nil {
 			return err
 		}
 
-		DirectoryMap[directory] = append(DirectoryMap[directory], &model)
+		p.DirectoryMap[directory] = append(p.DirectoryMap[directory], &model)
 
-		DirectoryIndexes[directory]++
-		GlobalIndex++
+		p.FilesIndexer[directory]++
+		p.GlobalIndex++
 
 		bar.Increment()
 	}
@@ -68,24 +82,25 @@ func (p *Processor) Process() error {
 	return nil
 }
 
-func handleFile(file *os.File, dirIndex int, destinationDir string, directory string) (models.File, error) {
+func (p *Processor) handleFile(file *os.File, dirIndex int, destinationDir string, directory string) (models.Media, error) {
 	info, err := file.Stat()
 	if err != nil {
-		return models.File{}, err
+		return models.Media{}, err
 	}
 
-	model := models.File{
+	model := models.Media{
 		Code:     utils.StrRandom(10),
-		Name:     utils.StrRandom(10),
 		RealName: filepath.Base(info.Name()),
 		Size:     info.Size(),
 		DirIndex: dirIndex,
-		Index:    GlobalIndex,
+		Index:    p.GlobalIndex,
 	}
 
 	// We only have to pass the file header = first 261 bytes
 	head := make([]byte, 261)
+
 	file.Read(head)
+
 	kind, err := filetype.Match(head)
 	if err != nil {
 		return model, err
@@ -98,28 +113,27 @@ func handleFile(file *os.File, dirIndex int, destinationDir string, directory st
 	model.MimeType = kind.MIME.Value
 
 	if kind.MIME.Type == "image" {
-		err := handleImageFile(file, &model, destinationDir, directory)
-		if err != nil {
-			return model, err
-		}
-
-		// panic("stop")
+		err = p.handleImageFile(file, &model, destinationDir, directory)
+	} else if kind.MIME.Type == "video" {
+		err = p.handleVideoFile(file, &model, destinationDir, directory)
+	}
+	if err != nil {
+		return model, err
 	}
 
 	return model, nil
 }
 
-func handleImageFile(file *os.File, model *models.File, destinationDir string, directory string) error {
-	formats := []enums.FormatExt{enums.JPEG, enums.WEBP}
+func (p *Processor) handleImageFile(file *os.File, model *models.Media, destinationDir string, directory string) error {
 	thumbSizes := struct{ Md, Sm, Xs int }{Xs: 100, Sm: 300, Md: 500}
 
 	img := images.New(
 		images.WithFile(file),
 		images.WithModel(model),
 		images.WithDestinationDir(destinationDir),
-		images.WithFormats(formats),
 		images.WithThumbSizes(thumbSizes),
 		images.WithDirectory(directory),
+		images.WithDb(p.db),
 	)
 
 	err := img.Process()
@@ -127,12 +141,27 @@ func handleImageFile(file *os.File, model *models.File, destinationDir string, d
 		return err
 	}
 
-	// jsonData, err := json.MarshalIndent(model, "", "  ")
-	// if err != nil {
-	// 	return err
-	// }
+	return nil
+}
 
-	// fmt.Println(string(jsonData))
+func (p *Processor) handleVideoFile(file *os.File, model *models.Media, destinationDir string, directory string) error {
+	formats := []enums.FormatExt{enums.MP4, enums.WEBM}
+	thumbSizes := struct{ Md, Sm, Xs int }{Xs: 100, Sm: 300, Md: 500}
+
+	video := videos.New(
+		videos.WithFile(file),
+		videos.WithModel(model),
+		videos.WithDestinationDir(destinationDir),
+		videos.WithFormats(formats),
+		videos.WithThumbSizes(thumbSizes),
+		videos.WithDirectory(directory),
+		videos.WithDb(p.db),
+	)
+
+	err := video.Process()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -147,10 +176,10 @@ func formatFilePath(filePath string) string {
 	return filePath + fmt.Sprintf("%*s", spaces, " ")
 }
 
-func makeDirectory(path string, sourceDir string) {
-	directory := path[len(sourceDir):]
+func (p *Processor) makeDirectory(path string) {
+	directory := path[len(p.sourceDir):]
 
-	if _, exists := DirectoryMap[directory]; !exists {
-		DirectoryMap[directory] = []*models.File{}
+	if _, exists := p.DirectoryMap[directory]; !exists {
+		p.DirectoryMap[directory] = []*models.Media{}
 	}
 }

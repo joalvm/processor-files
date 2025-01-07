@@ -3,7 +3,6 @@ package ffmpeg
 import (
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/joalvm/processor-medias/pkg/utils"
 )
@@ -12,36 +11,51 @@ var (
 	FfmpegBinPath string = utils.NormalizeBin(utils.Resolve(os.TempDir(), "ffmpeg/bin/ffmpeg"))
 )
 
-// Funcion para ejecutar el comando ffmpeg
-func Ffmpeg(inputs []string, output string, options ...string) error {
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-v", "error"}
-
-	// Agregamos los inputs
-	for _, input := range inputs {
-		args = append(args, "-i", input)
-	}
-
-	args = append(args, options...)
-
-	args = append(args, output)
-
-	cmd := exec.Command(FfmpegBinPath, args...)
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
+type Ffmpeg struct {
+	Probe          *Ffprobe
+	input          string
+	output         string
+	previewMoments []float64
 }
 
-func FfmpegVersion() (string, error) {
-	output, err := exec.Command(FfmpegBinPath, "-hide_banner", "-version").Output()
-
-	if err != nil {
-		return "", err
+// Funcion para ejecutar el comando ffmpeg
+func NewFfmpeg() *Ffmpeg {
+	return &Ffmpeg{
+		Probe:          NewFfprobe(),
+		input:          "",
+		output:         "",
+		previewMoments: []float64{0.10, 0.30, 0.50, 0.70, 0.90},
 	}
+}
 
-	// Dividir la primera línea en saltos de linea y luego en espacios
-	parts := strings.Split(strings.Split(string(output), "\n")[0], " ")
+func (f *Ffmpeg) Input(input string) *Ffmpeg {
+	f.input = input
+	f.Probe = f.Probe.Input(input)
 
-	return parts[2], nil
+	return f
+}
+
+func (f *Ffmpeg) Output(output string) *Ffmpeg {
+	f.output = output
+	return f
+}
+
+func (f *Ffmpeg) run(args ...string) error {
+	return f.cmd(args...).Run()
+}
+
+func (f *Ffmpeg) out(args ...string) ([]byte, error) {
+	return f.cmd(args...).Output()
+}
+
+func (f *Ffmpeg) cmd(args ...string) *exec.Cmd {
+	arguments := []string{"-hide_banner", "-loglevel", "error", "-v", "error"}
+
+	arguments = append(arguments, args...)
+
+	cmd := exec.Command(FfmpegBinPath, arguments...)
+
+	cmd.Stderr = os.Stderr
+
+	return cmd
 }

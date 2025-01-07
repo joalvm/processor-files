@@ -38,8 +38,8 @@ func installWindows(url string) error {
 		return err
 	}
 
-	ffmpegVersion, _ := FfmpegVersion()
-	ffprobeVersion, _ := FfprobeVersion()
+	ffmpegVersion, _ := NewFfmpeg().Version()
+	ffprobeVersion, _ := NewFfprobe().Version()
 
 	fmt.Printf("ffmpeg: %s ✔️\n", ffmpegVersion)
 	fmt.Printf("ffprobe: %s ✔️\n", ffprobeVersion)

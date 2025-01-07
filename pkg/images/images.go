@@ -9,14 +9,15 @@ import (
 	"github.com/joalvm/processor-medias/pkg/imagemagick"
 	"github.com/joalvm/processor-medias/pkg/models"
 	"github.com/joalvm/processor-medias/pkg/utils"
+	"gorm.io/gorm"
 )
 
 type Image struct {
-	model          *models.File
+	model          *models.Media
 	file           *os.File
+	db             *gorm.DB
 	directory      string
 	destinationDir string
-	formats        []enums.FormatExt
 	thumbSizes     struct{ Md, Sm, Xs int }
 	thumbFormat    enums.FormatExt
 }
@@ -30,18 +31,13 @@ func New(options ...func(*Image)) *Image {
 }
 
 func (i *Image) Process() error {
-	w, h, err := imagemagick.NewWithInput(i.file.Name()).Dimensions()
-	if err != nil {
-		return err
-	}
+	magick := imagemagick.NewImageMagick().Input(i.file.Name())
 
-	i.model.Width = w
-	i.model.Height = h
-	i.model.Orientation = utils.GetOrientation(w, h)
-	i.model.AspectRatio = utils.GetAspectRatio(w, h)
-	i.model.Preview = nil
+	i.model.Width = magick.Info.Width
+	i.model.Height = magick.Info.Height
+	i.model.MimeType = magick.Info.Mime
 
-	err = i.makeFolder()
+	err := i.makeFolder()
 	if err != nil {
 		return err
 	}
@@ -61,7 +57,9 @@ func (i *Image) processImage() error {
 		return err
 	}
 
-	err = i.makeFormats()
+	name := utils.Resolve(i.getFolder(), fmt.Sprintf("%s.%s", i.model.Code, strings.ToLower(i.thumbFormat.String())))
+
+	_, err = imagemagick.NewImageMagick().Input(i.file.Name()).Output(name).Quality(80).Save()
 	if err != nil {
 		return err
 	}
@@ -75,87 +73,35 @@ func (i *Image) processGif() error {
 	return nil
 }
 
-func (i *Image) makeFormats() error {
-	for _, format := range i.formats {
-		name := utils.Resolve(i.getFolder(), fmt.Sprintf("%s.%s", i.model.Name, strings.ToLower(format.String())))
-
-		err := imagemagick.NewWithInput(i.file.Name()).SetOutput(name).Convert(80)
-		if err != nil {
-			return err
-		}
-
-		w, h, err := imagemagick.NewWithInput(name).Dimensions()
-		if err != nil {
-			return err
-		}
-
-		info, err := os.Stat(name)
-		if err != nil {
-			return err
-		}
-
-		i.model.Formats = append(i.model.Formats, models.Format{
-			Type:     enums.IMAGE,
-			Ext:      format,
-			MimeType: fmt.Sprintf("image/%s", strings.ToLower(format.String())),
-			Size:     info.Size(),
-			Width:    w,
-			Height:   h,
-		})
-	}
-
-	return nil
-}
-
 func (i *Image) makeThumbnails() error {
-	media, err := i.makeThumbnail(i.thumbSizes.Md, "md")
-	if err != nil {
-		return err
+	// Iterar todos los tamaños de miniaturas y generarlos
+
+	for _, size := range []struct {
+		size   int
+		suffix string
+	}{
+		{i.thumbSizes.Md, "md"},
+		{i.thumbSizes.Sm, "sm"},
+		{i.thumbSizes.Xs, "xs"},
+	} {
+		err := i.makeThumbnail(size.size, size.suffix)
+		if err != nil {
+			return err
+		}
 	}
-
-	i.model.Thumbnails.Md = media
-
-	media, err = i.makeThumbnail(i.thumbSizes.Sm, "sm")
-	if err != nil {
-		return err
-	}
-
-	i.model.Thumbnails.Md = media
-
-	media, err = i.makeThumbnail(i.thumbSizes.Xs, "xs")
-	if err != nil {
-		return err
-	}
-
-	i.model.Thumbnails.Xs = media
 
 	return nil
 }
 
-func (i *Image) makeThumbnail(size int, suffix string) (models.Media, error) {
+func (i *Image) makeThumbnail(size int, suffix string) error {
 	name := i.thumbName(suffix)
 
-	err := imagemagick.NewWithInput(i.file.Name()).SetOutput(name).Resize(size)
+	_, err := imagemagick.NewImageMagick().Input(i.file.Name()).Output(name).Resize(size).Quality(90).Save()
 	if err != nil {
-		return models.Media{}, err
+		return err
 	}
 
-	w, h, err := imagemagick.NewWithInput(name).Dimensions()
-	if err != nil {
-		return models.Media{}, err
-	}
-
-	info, err := os.Stat(name)
-	if err != nil {
-		return models.Media{}, err
-	}
-
-	return models.Media{
-		Width:  w,
-		Height: h,
-		Size:   info.Size(),
-		Path:   name[len(i.getFolder()+string(os.PathSeparator)):],
-	}, nil
+	return nil
 }
 
 func (i *Image) makeFolder() error {
@@ -181,7 +127,7 @@ func (i *Image) thumbName(suffix string) string {
 		i.getFolder(),
 		fmt.Sprintf(
 			"%s_%s.%s",
-			i.model.Name,
+			i.model.Code,
 			strings.ToLower(suffix),
 			strings.ToLower(ext),
 		),

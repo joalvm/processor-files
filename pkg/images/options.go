@@ -3,11 +3,11 @@ package images
 import (
 	"os"
 
-	"github.com/joalvm/processor-medias/pkg/enums"
 	"github.com/joalvm/processor-medias/pkg/models"
+	"gorm.io/gorm"
 )
 
-func WithModel(model *models.File) func(*Image) {
+func WithModel(model *models.Media) func(*Image) {
 	return func(i *Image) {
 		i.model = model
 	}
@@ -31,14 +31,14 @@ func WithDestinationDir(destinationDir string) func(*Image) {
 	}
 }
 
-func WithFormats(formats []enums.FormatExt) func(*Image) {
-	return func(i *Image) {
-		i.formats = formats
-	}
-}
-
 func WithThumbSizes(sizes struct{ Md, Sm, Xs int }) func(*Image) {
 	return func(i *Image) {
 		i.thumbSizes = sizes
+	}
+}
+
+func WithDb(db *gorm.DB) func(*Image) {
+	return func(i *Image) {
+		i.db = db
 	}
 }
